@@ -1,0 +1,216 @@
+/**
+ * Gmail to CRM - Content Script Styles
+ *
+ * Styles for the injected UI elements in Gmail
+ */
+
+/* ============================================
+   Log to CRM Button
+   ============================================ */
+
+.gmail-to-crm-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  background-color: #1a73e8;
+  color: white;
+  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s, box-shadow 0.2s;
+  white-space: nowrap;
+}
+
+.gmail-to-crm-button:hover:not(:disabled) {
+  background-color: #1557b0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.gmail-to-crm-button:active:not(:disabled) {
+  background-color: #104a9e;
+}
+
+.gmail-to-crm-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* Logged state */
+.gmail-to-crm-button.gmail-to-crm-logged {
+  background-color: #34a853;
+  cursor: default;
+}
+
+.gmail-to-crm-button.gmail-to-crm-logged:hover {
+  background-color: #34a853;
+  box-shadow: none;
+}
+
+/* ============================================
+   Button Icon
+   ============================================ */
+
+.gmail-to-crm-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* ============================================
+   Customer Name (shown when logged)
+   ============================================ */
+
+.gmail-to-crm-customer {
+  font-size: 12px;
+  opacity: 0.9;
+  margin-left: 4px;
+}
+
+/* ============================================
+   Loading Spinner
+   ============================================ */
+
+.gmail-to-crm-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: gmail-to-crm-spin 0.8s linear infinite;
+}
+
+@keyframes gmail-to-crm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================
+   Match Indicator (shows contact match status)
+   ============================================ */
+
+.gmail-to-crm-match-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.gmail-to-crm-match-indicator.matched {
+  background-color: #e6f4ea;
+  color: #137333;
+}
+
+.gmail-to-crm-match-indicator.no-match {
+  background-color: #fce8e6;
+  color: #c5221f;
+}
+
+.gmail-to-crm-match-indicator.searching {
+  background-color: #e8f0fe;
+  color: #1967d2;
+}
+
+/* ============================================
+   Tooltip / Dropdown Menu
+   ============================================ */
+
+.gmail-to-crm-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  min-width: 200px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  z-index: 10000;
+  overflow: hidden;
+}
+
+.gmail-to-crm-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.gmail-to-crm-dropdown-item:hover {
+  background-color: #f1f3f4;
+}
+
+.gmail-to-crm-dropdown-item-icon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #5f6368;
+}
+
+.gmail-to-crm-dropdown-item-text {
+  flex: 1;
+  font-size: 14px;
+  color: #202124;
+}
+
+.gmail-to-crm-dropdown-divider {
+  height: 1px;
+  background-color: #e0e0e0;
+  margin: 4px 0;
+}
+
+/* ============================================
+   Dark Mode Support
+   ============================================ */
+
+@media (prefers-color-scheme: dark) {
+  .gmail-to-crm-dropdown {
+    background: #2d2d2d;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+  }
+
+  .gmail-to-crm-dropdown-item:hover {
+    background-color: #3c3c3c;
+  }
+
+  .gmail-to-crm-dropdown-item-text {
+    color: #e8eaed;
+  }
+
+  .gmail-to-crm-dropdown-item-icon {
+    color: #9aa0a6;
+  }
+
+  .gmail-to-crm-dropdown-divider {
+    background-color: #3c3c3c;
+  }
+}
+
+/* ============================================
+   Gmail Dark Theme Support
+   ============================================ */
+
+/* Gmail applies dark theme via a class on body */
+body.aAU .gmail-to-crm-dropdown,
+[data-ogpc] .gmail-to-crm-dropdown {
+  background: #2d2d2d;
+}
+
+body.aAU .gmail-to-crm-dropdown-item:hover,
+[data-ogpc] .gmail-to-crm-dropdown-item:hover {
+  background-color: #3c3c3c;
+}
+
+body.aAU .gmail-to-crm-dropdown-item-text,
+[data-ogpc] .gmail-to-crm-dropdown-item-text {
+  color: #e8eaed;
+}
