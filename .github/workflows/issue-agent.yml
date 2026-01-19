@@ -62,7 +62,7 @@ jobs:
           ISSUE_TITLE=$(jq -r '.title' issue.json)
           ISSUE_BODY=$(jq -r '.body' issue.json)
 
-          OUTPUT=$(claude --print "
+          OUTPUT=$(claude --print --dangerously-skip-permissions "
           You are the ISSUE ANALYST. Your job is to research the codebase and create a clear brief.
 
           ## Core Philosophy
@@ -162,7 +162,7 @@ jobs:
             # ------ WRITER AGENT ------
             echo ">>> Running Writer Agent..."
 
-            WRITER_OUTPUT=$(claude --print "
+            WRITER_OUTPUT=$(claude --print --dangerously-skip-permissions "
             You are the WRITER AGENT. Your job is to make SURGICAL, MINIMAL changes.
 
             ## Iteration Info
@@ -222,7 +222,7 @@ jobs:
             # ------ REVIEWER AGENT ------
             echo ">>> Running Reviewer Agent..."
 
-            REVIEWER_OUTPUT=$(claude --print "
+            REVIEWER_OUTPUT=$(claude --print --dangerously-skip-permissions "
             You are the REVIEWER AGENT. You are the QUALITY GATEKEEPER.
 
             ## Iteration Info
@@ -326,7 +326,7 @@ jobs:
           git diff --staged > /dev/null 2>&1 || git add -A
           DIFF_SUMMARY=$(git diff --cached --stat)
 
-          COMMIT_MSG=$(claude --print "
+          COMMIT_MSG=$(claude --print --dangerously-skip-permissions "
           Generate a conventional commit message for these changes.
 
           Issue: #${{ env.ISSUE_NUMBER }} - $ISSUE_TITLE
