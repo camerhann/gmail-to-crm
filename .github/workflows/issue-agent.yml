@@ -1,0 +1,19 @@
+# Issue Agent - Calls the centralized workflow from camerhann/workflows
+# Auto-resolve issues with Claude AI when labeled with 'agent'
+
+name: Issue Agent
+
+on:
+  issues:
+    types: [opened, labeled]
+  issue_comment:
+    types: [created]
+
+jobs:
+  call-agent:
+    if: |
+      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'agent')) ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude-agent'))
+    uses: camerhann/workflows/.github/workflows/issue-agent.yml@main
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
