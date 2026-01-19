@@ -5,10 +5,10 @@
  * email data extraction when the button is clicked.
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { GmailEmail, EmailLogRequest, Customer } from '../types';
-import { extractEmailFromDOM, parseEmailAddress, parseEmailAddresses } from '../lib/gmail-api';
+import type { EmailLogRequest, Customer } from '../types';
+import { extractEmailFromDOM } from '../lib/gmail-api';
 
 // ============================================
 // Constants

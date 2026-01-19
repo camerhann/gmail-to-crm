@@ -54,13 +54,12 @@ async function apiRequest<T>(
 ): Promise<T> {
   const url = `${apiBaseUrl}${endpoint}`;
 
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-    ...options.headers,
-  };
-
-  // PLACEHOLDER: In production, make actual fetch call
+  // PLACEHOLDER: In production, uncomment this and remove mock responses
+  // const headers: HeadersInit = {
+  //   'Content-Type': 'application/json',
+  //   ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+  //   ...options.headers,
+  // };
   // const response = await fetch(url, { ...options, headers });
   // if (!response.ok) throw new Error(`API error: ${response.status}`);
   // return response.json();

@@ -9,7 +9,6 @@ import type {
   ExtensionMessage,
   ExtensionResponse,
   ExtensionSettings,
-  DEFAULT_SETTINGS,
 } from '../types';
 import { initializeAuth, authenticateGoogle, authenticateBizDash, getAuthState } from '../lib/auth';
 import { logEmail, searchContactByEmail } from '../lib/api';

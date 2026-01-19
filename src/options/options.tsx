@@ -4,7 +4,7 @@
  * Allows users to configure the extension settings
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { ExtensionSettings } from '../types';
 

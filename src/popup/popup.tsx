@@ -4,9 +4,9 @@
  * Shows connection status, recent logged emails, and quick actions
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { AuthState, GmailEmail, ExtensionSettings } from '../types';
+import type { AuthState, GmailEmail } from '../types';
 
 // ============================================
 // Styles
