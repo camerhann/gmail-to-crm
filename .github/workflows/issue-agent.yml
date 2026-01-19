@@ -101,10 +101,26 @@ jobs:
           echo "**Description:**" >> /tmp/analyst_prompt.txt
           echo "$ISSUE_BODY" >> /tmp/analyst_prompt.txt
 
-          # Run claude with prompt from file (piped via stdin)
-          OUTPUT=$(cat /tmp/analyst_prompt.txt | claude --print --dangerously-skip-permissions)
+          # Debug: Check if claude is installed and API key is set
+          echo "Claude version:"
+          claude --version || echo "Claude not found"
+          echo "API key set: ${ANTHROPIC_API_KEY:+yes}"
 
+          # Run claude with prompt from file (piped via stdin)
+          echo "Running claude..."
+          set +e
+          OUTPUT=$(cat /tmp/analyst_prompt.txt | claude --print --dangerously-skip-permissions 2>&1)
+          CLAUDE_EXIT=$?
+          set -e
+
+          echo "Claude exit code: $CLAUDE_EXIT"
+          echo "Claude output:"
           echo "$OUTPUT"
+
+          if [ $CLAUDE_EXIT -ne 0 ]; then
+            echo "Claude failed!"
+            exit 1
+          fi
 
           # Check for promise signals
           if echo "$OUTPUT" | grep -q "<promise>ANALYSIS_COMPLETE</promise>"; then
