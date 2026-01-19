@@ -62,15 +62,12 @@ jobs:
           ISSUE_TITLE=$(jq -r '.title' issue.json)
           ISSUE_BODY=$(jq -r '.body' issue.json)
 
-          OUTPUT=$(claude --print --dangerously-skip-permissions "
+          # Create prompt file to avoid shell escaping issues
+          cat > /tmp/analyst_prompt.txt << 'PROMPT_END'
           You are the ISSUE ANALYST. Your job is to research the codebase and create a clear brief.
 
           ## Core Philosophy
           The Writer should never have to guess what to do.
-
-          ## Issue #${{ env.ISSUE_NUMBER }}
-          **Title:** $ISSUE_TITLE
-          **Description:** $ISSUE_BODY
 
           ## Your Tasks
           1. Research the codebase - find relevant files, patterns, and existing implementations
@@ -95,7 +92,17 @@ jobs:
 
           If you cannot complete analysis (missing info, unclear requirements), output:
           <promise>ANALYSIS_BLOCKED: [reason]</promise>
-          ")
+          PROMPT_END
+
+          # Append issue details
+          echo "" >> /tmp/analyst_prompt.txt
+          echo "## Issue #${{ env.ISSUE_NUMBER }}" >> /tmp/analyst_prompt.txt
+          echo "**Title:** $ISSUE_TITLE" >> /tmp/analyst_prompt.txt
+          echo "**Description:**" >> /tmp/analyst_prompt.txt
+          echo "$ISSUE_BODY" >> /tmp/analyst_prompt.txt
+
+          # Run claude with prompt from file (piped via stdin)
+          OUTPUT=$(cat /tmp/analyst_prompt.txt | claude --print --dangerously-skip-permissions)
 
           echo "$OUTPUT"
 
