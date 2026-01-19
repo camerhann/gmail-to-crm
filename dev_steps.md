@@ -238,18 +238,18 @@ After loading the extension in Chrome (Step 5), you'll get an Extension ID.
 
 ## 4. BizDash Backend Configuration
 
-The extension needs these API endpoints on your BizDash backend:
+The extension connects to the BizDash CRM backend. The endpoints are already implemented in BizDash.
 
-### Required Endpoints
+### API Endpoints (Already in BizDash)
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
 | GET | `/api/v1/crm/contacts/by-email?email={email}` | Find contact by email address |
 | POST | `/api/v1/crm/emails` | Log email activity |
+| GET | `/api/v1/crm/emails/check?gmail_message_id={id}` | Check if email already logged |
 | GET | `/api/v1/crm` | List all customers |
 | GET | `/api/v1/crm/{id}` | Get customer details |
 | GET | `/api/v1/crm/{id}/emails` | Get emails for a contact |
-| GET | `/api/v1/crm/emails/check?gmail_message_id={id}` | Check if email already logged |
 
 ### Request/Response Formats
 
@@ -261,67 +261,115 @@ Response:
 {
   "contact": {
     "id": "uuid",
+    "xero_contact_id": "xero-uuid",
     "name": "John Smith",
     "email": "john@example.com",
-    "isCustomer": true,
-    "contactStatus": "ACTIVE"
+    "phone": "+1234567890",
+    "job_count": 5,
+    "invoice_count": 12,
+    "total_invoiced": 15000.00,
+    "total_paid": 12000.00,
+    "outstanding_balance": 3000.00
   },
-  "suggestions": []
+  "suggestions": []  // Domain-based suggestions if no exact match
 }
 ```
 
-**Log Email:**
+**Log Email (Extension → BizDash):**
 ```http
 POST /api/v1/crm/emails
 Content-Type: application/json
 
 {
-  "gmailMessageId": "18abc123",
+  "gmailMessageId": "18abc123def456",
   "gmailThreadId": "18abc100",
   "subject": "Re: Project Update",
   "fromEmail": "john@example.com",
   "fromName": "John Smith",
   "toEmails": ["you@yourcompany.com"],
-  "ccEmails": [],
+  "ccEmails": ["cc@example.com"],
   "emailDate": "2024-01-15T10:30:00Z",
   "snippet": "Thanks for the update...",
-  "contactId": "optional-uuid-if-known"
+  "contactId": null  // Optional: pre-matched contact ID
 }
 
 Response:
 {
-  "id": "email-activity-uuid",
+  "id": "email-uuid",
   "contactId": "matched-contact-uuid",
   "matched": true,
-  "customer": { ... }
+  "customer": {
+    "id": "uuid",
+    "xero_contact_id": "xero-uuid",
+    "name": "John Smith",
+    "email": "john@example.com",
+    ...
+  }
 }
 ```
 
-### Database Schema (if creating new table)
+### Auto-Derived Fields
+
+The BizDash backend automatically handles these fields - **the extension doesn't need to send them**:
+
+| Field | How It's Derived |
+|-------|------------------|
+| `customer_email` | From matched contact or defaults to `fromEmail` |
+| `direction` | `"inbound"` if fromEmail matches customer, `"outbound"` if toEmail matches |
+| `gmail_link` | Auto-generated: `https://mail.google.com/mail/u/0/#inbox/{messageId}` |
+| `synced_at` | Set to current timestamp automatically |
+
+### Database Schema (Already in BizDash)
+
+The `customer_emails` table in BizDash:
 
 ```sql
-CREATE TABLE email_activities (
+CREATE TABLE customer_emails (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  contact_id UUID REFERENCES xero_contacts(id),
+
+  -- Gmail identifiers
   gmail_message_id VARCHAR(255) UNIQUE NOT NULL,
   gmail_thread_id VARCHAR(255),
+
+  -- Customer link (matches xero_contacts.email)
+  customer_email VARCHAR(255) NOT NULL,
+
+  -- Email metadata
   subject TEXT,
   from_email VARCHAR(255) NOT NULL,
   from_name VARCHAR(255),
-  to_emails TEXT[], -- PostgreSQL array
-  cc_emails TEXT[],
-  email_date TIMESTAMP WITH TIME ZONE,
-  snippet TEXT,
-  body TEXT, -- Only if captureEmailBody is enabled
-  direction VARCHAR(20) DEFAULT 'inbound', -- 'inbound' or 'outbound'
-  logged_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  logged_by VARCHAR(255) -- User who logged it
+  to_email VARCHAR(255) NOT NULL,
+  cc_emails VARCHAR(255)[],  -- PostgreSQL array
+
+  -- Direction: 'inbound' (from customer) or 'outbound' (to customer)
+  direction VARCHAR(20) NOT NULL DEFAULT 'inbound',
+
+  -- Timestamps
+  sent_at TIMESTAMP WITH TIME ZONE NOT NULL,
+
+  -- Gmail link for opening in browser
+  gmail_link TEXT,
+
+  -- Sync metadata
+  synced_by_user_id VARCHAR(255),
+  synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE INDEX idx_email_activities_contact ON email_activities(contact_id);
-CREATE INDEX idx_email_activities_gmail_id ON email_activities(gmail_message_id);
-CREATE INDEX idx_email_activities_from ON email_activities(from_email);
+-- Indexes
+CREATE INDEX idx_customer_emails_gmail_id ON customer_emails(gmail_message_id);
+CREATE INDEX idx_customer_emails_customer ON customer_emails(customer_email);
+CREATE INDEX idx_customer_emails_customer_sent ON customer_emails(customer_email, sent_at);
+CREATE INDEX idx_customer_emails_direction ON customer_emails(customer_email, direction);
 ```
+
+### Matching Logic
+
+BizDash auto-matches emails to customers:
+
+1. **First**: Try to match `fromEmail` to a customer's email
+2. **If no match**: Try each `toEmail` against customer emails
+3. **Direction**: If matched customer's email equals `fromEmail` → `inbound`, else → `outbound`
+4. **Suggestions**: If no exact match, returns contacts from the same email domain
 
 ---
 
@@ -409,7 +457,32 @@ Verify the `dist/` folder contains:
 
 ## 7. Connecting to Real APIs
 
-The extension ships with **placeholder API responses**. Here's how to connect to real backends:
+The extension ships with **placeholder API responses**. The BizDash backend already has all required endpoints - you just need to enable real API calls.
+
+### Prerequisites
+
+1. **BizDash backend running** at your configured URL (default: `http://localhost:8000`)
+2. **CORS configured** in BizDash to allow requests from Chrome extensions
+3. **Database migrated** - Run `alembic upgrade head` to create the `customer_emails` table
+
+### CORS Configuration (BizDash Backend)
+
+Ensure BizDash allows requests from Chrome extensions. In FastAPI:
+
+```python
+# backend/app/main.py
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["chrome-extension://*"],  # Allow Chrome extensions
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+Here's how to connect to real backends:
 
 ### Step 7.1: Update BizDash API Client
 
