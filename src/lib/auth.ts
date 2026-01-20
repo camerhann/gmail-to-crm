@@ -1,19 +1,13 @@
 /**
  * Authentication Module
  *
- * PLACEHOLDER: Handles OAuth flows for both Google (Gmail access) and
- * BizDash CRM authentication.
- *
- * Production TODO:
- * - Implement actual OAuth flows
- * - Handle token refresh
- * - Secure token storage
- * - Handle Workspace admin consent
+ * Handles OAuth flows for both Google (Gmail access) and BizDash CRM authentication.
+ * Uses Chrome Identity API for seamless Google OAuth in extensions.
  *
  * Google Workspace Considerations:
  * - OAuth consent must be approved by Workspace admin for org-wide use
- * - Consider domain-wide delegation for admin features
- * - Handle multiple Google accounts gracefully
+ * - Extension must be configured in Google Cloud Console
+ * - Scopes defined in manifest.json
  */
 
 import type { AuthState, GoogleAuthToken, BizDashAuth } from '../types';
@@ -66,41 +60,47 @@ function updateAuthState(updates: Partial<AuthState>): void {
 /**
  * Initiate Google OAuth flow
  * Uses Chrome Identity API for seamless auth in extensions
- *
- * PLACEHOLDER: Returns mock token for development
  */
 export async function authenticateGoogle(): Promise<GoogleAuthToken> {
   console.log('[Auth] Starting Google OAuth flow...');
 
-  // PLACEHOLDER: In production, use chrome.identity.getAuthToken
-  // return new Promise((resolve, reject) => {
-  //   chrome.identity.getAuthToken({ interactive: true }, (token) => {
-  //     if (chrome.runtime.lastError) {
-  //       reject(new Error(chrome.runtime.lastError.message));
-  //       return;
-  //     }
-  //     // Store and return token...
-  //   });
-  // });
+  return new Promise((resolve, reject) => {
+    // Check if running in Chrome extension context
+    if (typeof chrome === 'undefined' || !chrome.identity) {
+      reject(new Error('Chrome Identity API not available - must run as extension'));
+      return;
+    }
 
-  // Mock token for development
-  const mockToken: GoogleAuthToken = {
-    accessToken: 'mock-google-access-token',
-    expiresAt: Date.now() + 3600 * 1000, // 1 hour
-    scope:
-      'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/userinfo.email',
-  };
+    chrome.identity.getAuthToken({ interactive: true }, async (token) => {
+      if (chrome.runtime.lastError) {
+        console.error('[Auth] Google OAuth failed:', chrome.runtime.lastError.message);
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
 
-  // Configure Gmail API with token
-  configureGmailApi(mockToken.accessToken);
+      if (!token) {
+        reject(new Error('No token received from Google OAuth'));
+        return;
+      }
 
-  // Store in chrome.storage
-  await saveToStorage(STORAGE_KEYS.GOOGLE_TOKEN, mockToken);
+      const authToken: GoogleAuthToken = {
+        accessToken: token,
+        expiresAt: Date.now() + 3600 * 1000, // Token expires in ~1 hour
+        scope: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/userinfo.email',
+      };
 
-  updateAuthState({ google: mockToken });
+      // Configure Gmail API with token
+      configureGmailApi(authToken.accessToken);
 
-  console.log('[Auth] Google OAuth complete (mock)');
-  return mockToken;
+      // Store in chrome.storage
+      await saveToStorage(STORAGE_KEYS.GOOGLE_TOKEN, authToken);
+
+      updateAuthState({ google: authToken });
+
+      console.log('[Auth] Google OAuth complete');
+      resolve(authToken);
+    });
+  });
 }
 
 /**
@@ -114,27 +114,39 @@ export function isGoogleTokenValid(): boolean {
 
 /**
  * Refresh Google OAuth token
+ * Uses non-interactive mode to silently refresh if possible
  */
 export async function refreshGoogleToken(): Promise<GoogleAuthToken | null> {
   console.log('[Auth] Refreshing Google token...');
 
-  // PLACEHOLDER: In production, use chrome.identity.getAuthToken with interactive: false
-  // or implement refresh token flow
-
-  if (!currentAuthState.google) {
+  if (typeof chrome === 'undefined' || !chrome.identity) {
+    console.warn('[Auth] Chrome Identity API not available');
     return null;
   }
 
-  // Mock refresh - just extend expiry
-  const refreshedToken: GoogleAuthToken = {
-    ...currentAuthState.google,
-    expiresAt: Date.now() + 3600 * 1000,
-  };
+  return new Promise((resolve) => {
+    // Try non-interactive first (silent refresh)
+    chrome.identity.getAuthToken({ interactive: false }, async (token) => {
+      if (chrome.runtime.lastError || !token) {
+        console.log('[Auth] Silent refresh failed, may need re-authentication');
+        resolve(null);
+        return;
+      }
 
-  await saveToStorage(STORAGE_KEYS.GOOGLE_TOKEN, refreshedToken);
-  updateAuthState({ google: refreshedToken });
+      const refreshedToken: GoogleAuthToken = {
+        accessToken: token,
+        expiresAt: Date.now() + 3600 * 1000,
+        scope: currentAuthState.google?.scope || '',
+      };
 
-  return refreshedToken;
+      configureGmailApi(refreshedToken.accessToken);
+      await saveToStorage(STORAGE_KEYS.GOOGLE_TOKEN, refreshedToken);
+      updateAuthState({ google: refreshedToken });
+
+      console.log('[Auth] Google token refreshed');
+      resolve(refreshedToken);
+    });
+  });
 }
 
 /**
@@ -143,11 +155,27 @@ export async function refreshGoogleToken(): Promise<GoogleAuthToken | null> {
 export async function revokeGoogleToken(): Promise<void> {
   console.log('[Auth] Revoking Google token...');
 
-  // PLACEHOLDER: In production, use chrome.identity.removeCachedAuthToken
-  // and optionally revoke on Google's servers
+  const token = currentAuthState.google?.accessToken;
+
+  if (token && typeof chrome !== 'undefined' && chrome.identity) {
+    // Remove the cached token from Chrome's identity cache
+    await new Promise<void>((resolve) => {
+      chrome.identity.removeCachedAuthToken({ token }, () => {
+        resolve();
+      });
+    });
+
+    // Optionally revoke on Google's servers
+    try {
+      await fetch(`https://accounts.google.com/o/oauth2/revoke?token=${token}`);
+    } catch (error) {
+      console.warn('[Auth] Failed to revoke token on Google servers:', error);
+    }
+  }
 
   await removeFromStorage(STORAGE_KEYS.GOOGLE_TOKEN);
   updateAuthState({ google: null });
+  console.log('[Auth] Google token revoked');
 }
 
 // ============================================
@@ -156,41 +184,49 @@ export async function revokeGoogleToken(): Promise<void> {
 
 /**
  * Authenticate with BizDash CRM
- *
- * PLACEHOLDER: In production, this would handle:
- * - Redirect to BizDash login if needed
- * - Exchange auth code for tokens
- * - Store tenant information
+ * Verifies the BizDash server is reachable
  */
 export async function authenticateBizDash(
-  apiUrl: string
+  apiUrl: string,
+  apiKey?: string
 ): Promise<BizDashAuth> {
-  console.log('[Auth] Authenticating with BizDash...', apiUrl);
+  console.log('[Auth] Connecting to BizDash...', apiUrl);
 
-  // PLACEHOLDER: In production, implement actual auth flow
-  // This might involve:
-  // - Opening BizDash login in a new tab
-  // - Receiving callback with auth token
-  // - Verifying token with BizDash API
+  // Verify BizDash is reachable by hitting health endpoint
+  try {
+    const verifyResponse = await fetch(`${apiUrl}/health`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
 
-  // Mock auth for development
-  const mockAuth: BizDashAuth = {
+    if (!verifyResponse.ok) {
+      throw new Error(`BizDash not reachable: ${verifyResponse.status}`);
+    }
+  } catch (error) {
+    console.error('[Auth] BizDash connection failed:', error);
+    throw new Error(`Cannot connect to BizDash at ${apiUrl}. Is the server running?`);
+  }
+
+  const bizdashAuth: BizDashAuth = {
     apiUrl,
-    tenantId: 'mock-tenant-123',
+    apiKey: apiKey || undefined,
+    tenantId: 'default',
     isAuthenticated: true,
-    userEmail: 'user@company.com',
+    userEmail: 'connected',
   };
 
   // Configure API client
-  configureApi(apiUrl, 'mock-bizdash-token');
+  configureApi(apiUrl, apiKey || '');
 
   // Store auth state
-  await saveToStorage(STORAGE_KEYS.BIZDASH_AUTH, mockAuth);
+  await saveToStorage(STORAGE_KEYS.BIZDASH_AUTH, bizdashAuth);
 
-  updateAuthState({ bizdash: mockAuth });
+  updateAuthState({ bizdash: bizdashAuth });
 
-  console.log('[Auth] BizDash auth complete (mock)');
-  return mockAuth;
+  console.log('[Auth] BizDash connected successfully');
+  return bizdashAuth;
 }
 
 /**

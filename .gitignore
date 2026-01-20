@@ -29,3 +29,7 @@ npm-debug.log*
 
 # Test
 coverage/
+
+# Build artifacts for Chrome Web Store
+*.zip
+store-screenshot*.png

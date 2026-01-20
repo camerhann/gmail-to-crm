@@ -56,6 +56,9 @@ async function handleMessage(message: ExtensionMessage): Promise<unknown> {
     case 'LOG_EMAIL':
       return logEmail(message.payload);
 
+    case 'LOG_EMAILS_BULK':
+      return logEmailsBulk(message.payload.emails);
+
     case 'SEARCH_CONTACT':
       return searchContactByEmail(message.payload.email);
 
@@ -79,9 +82,44 @@ async function handleMessage(message: ExtensionMessage): Promise<unknown> {
       await chrome.storage.session.set({ currentEmail: message.payload });
       return { stored: true };
 
+    case 'CONTENT_SCRIPT_READY':
+      // Content script announcing it's ready
+      console.log('[Service Worker] Content script ready');
+      return { acknowledged: true };
+
     default:
       throw new Error(`Unknown message type: ${(message as { type: string }).type}`);
   }
+}
+
+/**
+ * Log multiple emails in bulk
+ */
+async function logEmailsBulk(emails: import('../types').EmailLogRequest[]): Promise<{
+  total: number;
+  successful: number;
+  failed: number;
+  results: Array<{ success: boolean; email: string; error?: string }>;
+}> {
+  const results: Array<{ success: boolean; email: string; error?: string }> = [];
+  let successful = 0;
+  let failed = 0;
+
+  for (const email of emails) {
+    try {
+      await logEmail(email);
+      results.push({ success: true, email: email.subject });
+      successful++;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      results.push({ success: false, email: email.subject, error: errorMessage });
+      failed++;
+      console.error(`[Service Worker] Failed to log email "${email.subject}":`, error);
+    }
+  }
+
+  console.log(`[Service Worker] Bulk log complete: ${successful}/${emails.length} successful`);
+  return { total: emails.length, successful, failed, results };
 }
 
 // ============================================
@@ -116,29 +154,9 @@ async function updateSettings(
   });
 }
 
-// ============================================
-// Context Menu (Right-click menu)
-// ============================================
-
-// Create context menu when extension is installed
+// Extension installed handler
 chrome.runtime.onInstalled.addListener(() => {
   console.log('[Service Worker] Extension installed');
-
-  // Create right-click menu item
-  chrome.contextMenus.create({
-    id: 'log-email-to-crm',
-    title: 'Log to BizDash CRM',
-    contexts: ['page'],
-    documentUrlPatterns: ['https://mail.google.com/*'],
-  });
-});
-
-// Handle context menu clicks
-chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === 'log-email-to-crm' && tab?.id) {
-    // Send message to content script to log current email
-    chrome.tabs.sendMessage(tab.id, { type: 'TRIGGER_LOG_EMAIL' });
-  }
 });
 
 // ============================================

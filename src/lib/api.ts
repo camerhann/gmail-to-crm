@@ -1,21 +1,16 @@
 /**
  * BizDash CRM API Client
  *
- * PLACEHOLDER: This module provides the interface for communicating with
- * the BizDash backend. Actual API calls are mocked for initial development.
- *
- * Production TODO:
- * - Implement actual HTTP calls to BizDash API
- * - Add proper error handling and retry logic
- * - Implement authentication token refresh
+ * This module handles all communication with the BizDash CRM backend API.
+ * Includes contact search, email logging, and health checking.
  */
 
 import type {
-  Customer,
   EmailLogRequest,
   EmailLogResponse,
   ContactSearchResponse,
   EmailActivity,
+  Customer,
 } from '../types';
 
 // ============================================
@@ -45,8 +40,7 @@ export function getApiBaseUrl(): string {
 // ============================================
 
 /**
- * Make an authenticated API request
- * PLACEHOLDER: Returns mock data for now
+ * Make an authenticated API request to BizDash
  */
 async function apiRequest<T>(
   endpoint: string,
@@ -54,80 +48,23 @@ async function apiRequest<T>(
 ): Promise<T> {
   const url = `${apiBaseUrl}${endpoint}`;
 
-  // PLACEHOLDER: In production, uncomment this and remove mock responses
-  // const headers: HeadersInit = {
-  //   'Content-Type': 'application/json',
-  //   ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-  //   ...options.headers,
-  // };
-  // const response = await fetch(url, { ...options, headers });
-  // if (!response.ok) throw new Error(`API error: ${response.status}`);
-  // return response.json();
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    ...options.headers,
+  };
 
-  console.log(`[BizDash API] ${options.method || 'GET'} ${url}`, options.body);
+  console.log(`[BizDash API] ${options.method || 'GET'} ${url}`);
 
-  // Return mock data based on endpoint
-  return getMockResponse<T>(endpoint, options);
-}
+  const response = await fetch(url, { ...options, headers });
 
-// ============================================
-// Mock Responses (PLACEHOLDER)
-// ============================================
-
-/**
- * Generate mock responses for development
- * TODO: Remove when connecting to real API
- */
-function getMockResponse<T>(endpoint: string, options: RequestInit): T {
-  // Mock: Search contact by email
-  if (endpoint.includes('/contacts/by-email')) {
-    const mockContact: Customer = {
-      id: 'mock-contact-123',
-      xeroContactId: 'xero-456',
-      name: 'John Smith',
-      firstName: 'John',
-      lastName: 'Smith',
-      email: 'john@example.com',
-      phone: '+1234567890',
-      isCustomer: true,
-      isSupplier: false,
-      contactStatus: 'ACTIVE',
-    };
-
-    return {
-      contact: mockContact,
-      suggestions: [],
-    } as T;
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'Unknown error');
+    console.error(`[BizDash API] Error ${response.status}: ${errorText}`);
+    throw new Error(`BizDash API error ${response.status}: ${errorText}`);
   }
 
-  // Mock: Log email
-  if (endpoint === '/api/v1/crm/emails' && options.method === 'POST') {
-    const body = JSON.parse(options.body as string) as EmailLogRequest;
-
-    return {
-      id: `email-${Date.now()}`,
-      contactId: body.contactId || 'mock-contact-123',
-      matched: true,
-      customer: {
-        id: 'mock-contact-123',
-        name: 'John Smith',
-        email: body.fromEmail,
-        isCustomer: true,
-        isSupplier: false,
-        contactStatus: 'ACTIVE',
-      },
-    } as T;
-  }
-
-  // Mock: Get emails for contact
-  if (endpoint.includes('/emails')) {
-    return {
-      emails: [],
-    } as T;
-  }
-
-  // Default mock
-  return {} as T;
+  return response.json();
 }
 
 // ============================================
@@ -222,11 +159,14 @@ export async function isEmailLogged(gmailMessageId: string): Promise<boolean> {
  */
 export async function healthCheck(): Promise<boolean> {
   try {
-    // PLACEHOLDER: In production, make actual health check
-    // await apiRequest('/health');
-    console.log('[BizDash API] Health check (mock: OK)');
-    return true;
-  } catch {
+    const response = await fetch(`${apiBaseUrl}/health`, {
+      method: 'GET',
+      headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    });
+    console.log(`[BizDash API] Health check: ${response.ok ? 'OK' : 'FAILED'}`);
+    return response.ok;
+  } catch (error) {
+    console.error('[BizDash API] Health check failed:', error);
     return false;
   }
 }

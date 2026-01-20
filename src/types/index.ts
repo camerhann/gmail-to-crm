@@ -141,6 +141,7 @@ export interface GoogleAuthToken {
  */
 export interface BizDashAuth {
   apiUrl: string;
+  apiKey?: string;
   tenantId: string;
   isAuthenticated: boolean;
   userEmail?: string;
@@ -194,13 +195,18 @@ export interface ExtensionState {
  */
 export type ExtensionMessage =
   | { type: 'LOG_EMAIL'; payload: EmailLogRequest }
+  | { type: 'LOG_EMAILS_BULK'; payload: { emails: EmailLogRequest[] } }
   | { type: 'SEARCH_CONTACT'; payload: { email: string } }
   | { type: 'GET_AUTH_STATE' }
   | { type: 'AUTHENTICATE_GOOGLE' }
   | { type: 'AUTHENTICATE_BIZDASH'; payload: { apiUrl: string } }
   | { type: 'GET_SETTINGS' }
   | { type: 'UPDATE_SETTINGS'; payload: Partial<ExtensionSettings> }
-  | { type: 'EMAIL_SELECTED'; payload: GmailEmail };
+  | { type: 'EMAIL_SELECTED'; payload: GmailEmail }
+  | { type: 'GET_SELECTED_EMAILS' }
+  | { type: 'GET_SELECTED_COUNT' }
+  | { type: 'PING' }
+  | { type: 'CONTENT_SCRIPT_READY' };
 
 /**
  * Response messages from background script

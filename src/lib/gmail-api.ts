@@ -1,20 +1,13 @@
 /**
  * Gmail API Client
  *
- * PLACEHOLDER: This module provides the interface for reading email data
- * from Gmail using the Gmail API. Actual API calls are mocked for initial
- * development.
+ * This module handles reading email data from Gmail using the Gmail API.
+ * Uses Chrome extension OAuth via chrome.identity for authentication.
  *
- * Production TODO:
- * - Implement actual Gmail API calls
- * - Handle OAuth token refresh
- * - Add pagination for large mailboxes
- * - Implement proper error handling
- *
- * Google Workspace Considerations:
- * - Requires Gmail API enabled in Google Cloud Console
- * - OAuth consent screen must be configured for Workspace
- * - May need Workspace admin approval for org-wide deployment
+ * Requirements:
+ * - Gmail API enabled in Google Cloud Console
+ * - OAuth consent screen configured
+ * - Appropriate scopes in manifest.json
  */
 
 import type { GmailEmail, EmailAddress } from '../types';
@@ -47,7 +40,6 @@ const GMAIL_API_BASE = 'https://gmail.googleapis.com/gmail/v1';
 
 /**
  * Make an authenticated Gmail API request
- * PLACEHOLDER: Returns mock data for now
  */
 async function gmailRequest<T>(endpoint: string): Promise<T> {
   if (!accessToken) {
@@ -55,58 +47,19 @@ async function gmailRequest<T>(endpoint: string): Promise<T> {
   }
 
   const url = `${GMAIL_API_BASE}${endpoint}`;
-
-  // PLACEHOLDER: In production, make actual fetch call
-  // const response = await fetch(url, {
-  //   headers: { Authorization: `Bearer ${accessToken}` },
-  // });
-  // if (!response.ok) throw new Error(`Gmail API error: ${response.status}`);
-  // return response.json();
-
   console.log(`[Gmail API] GET ${url}`);
 
-  // Return mock data
-  return getMockGmailResponse<T>(endpoint);
-}
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
 
-// ============================================
-// Mock Responses (PLACEHOLDER)
-// ============================================
-
-/**
- * Generate mock Gmail API responses
- * TODO: Remove when connecting to real API
- */
-function getMockGmailResponse<T>(endpoint: string): T {
-  // Mock: Get message
-  if (endpoint.includes('/messages/')) {
-    const mockMessage = {
-      id: 'mock-message-123',
-      threadId: 'mock-thread-456',
-      labelIds: ['INBOX', 'IMPORTANT'],
-      snippet: 'This is a preview of the email content...',
-      payload: {
-        headers: [
-          { name: 'From', value: 'John Smith <john@example.com>' },
-          { name: 'To', value: 'me@company.com' },
-          { name: 'Subject', value: 'Re: Project Update' },
-          { name: 'Date', value: new Date().toISOString() },
-        ],
-      },
-    };
-    return mockMessage as T;
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'Unknown error');
+    console.error(`[Gmail API] Error ${response.status}: ${errorText}`);
+    throw new Error(`Gmail API error ${response.status}: ${errorText}`);
   }
 
-  // Mock: Get user profile
-  if (endpoint.includes('/profile')) {
-    return {
-      emailAddress: 'me@company.com',
-      messagesTotal: 1000,
-      threadsTotal: 500,
-    } as T;
-  }
-
-  return {} as T;
+  return response.json();
 }
 
 // ============================================
@@ -220,12 +173,50 @@ export async function getMessage(messageId: string): Promise<GmailEmail> {
 export async function getThread(
   threadId: string
 ): Promise<{ messages: GmailEmail[] }> {
-  // PLACEHOLDER: Would fetch all messages in thread
-  console.log(`[Gmail API] Getting thread: ${threadId}`);
+  interface GmailApiThread {
+    id: string;
+    messages: Array<{
+      id: string;
+      threadId: string;
+      labelIds: string[];
+      snippet: string;
+      payload: {
+        headers: Array<{ name: string; value: string }>;
+        body?: { data?: string };
+        parts?: Array<{ body?: { data?: string }; mimeType?: string }>;
+      };
+    }>;
+  }
 
-  return {
-    messages: [],
-  };
+  const thread = await gmailRequest<GmailApiThread>(
+    `/users/me/threads/${threadId}?format=full`
+  );
+
+  const messages: GmailEmail[] = thread.messages.map((msg) => {
+    const headers = new Map(
+      msg.payload.headers.map((h) => [h.name.toLowerCase(), h.value])
+    );
+
+    const from = parseEmailAddress(headers.get('from') || '');
+    const to = parseEmailAddresses(headers.get('to') || '');
+    const cc = parseEmailAddresses(headers.get('cc') || '');
+    const bcc = parseEmailAddresses(headers.get('bcc') || '');
+
+    return {
+      messageId: msg.id,
+      threadId: msg.threadId,
+      subject: headers.get('subject') || '(No Subject)',
+      from,
+      to,
+      cc,
+      bcc,
+      date: new Date(headers.get('date') || Date.now()),
+      snippet: msg.snippet,
+      labels: msg.labelIds || [],
+    };
+  });
+
+  return { messages };
 }
 
 // ============================================
@@ -260,10 +251,13 @@ export function extractEmailFromDOM(): GmailEmail | null {
       document.querySelector('[data-legacy-thread-id]');
     const subject = subjectEl?.textContent || document.title.split(' - ')[0];
 
-    // Extract sender (look for email hover cards or from field)
-    const fromEl = emailContainer.querySelector('[email]');
+    // Extract sender - Gmail uses .gD class for sender with email attribute
+    // Look globally first (more reliable), then fall back to container
+    const fromEl = document.querySelector('.gD[email]') ||
+                   emailContainer.querySelector('[email]') ||
+                   emailContainer.closest('.gs')?.querySelector('[email]');
     const fromEmail = fromEl?.getAttribute('email') || '';
-    const fromName = fromEl?.getAttribute('name') || fromEl?.textContent || '';
+    const fromName = fromEl?.getAttribute('name') || fromEl?.textContent?.trim() || '';
 
     // Extract snippet from visible content
     const bodyEl = emailContainer.querySelector('[data-message-id] > div');
